@@ -46,7 +46,7 @@ n_swaps = apply_fixed_rate_swap!(chains, 0.1, rng)
 # Nota
 Si tienes n_chains cadenas, se intentan (n_chains - 1) swaps en cada llamada.
 """
-
+ 
 
 function apply_fixed_rate_swap!(chains, s, rng)
     n_chains = length(chains)
@@ -57,12 +57,15 @@ function apply_fixed_rate_swap!(chains, s, rng)
         if rand(rng) < s
             # Intercambiar configuraciones completas
             chains[i], chains[i+1] = chains[i+1], chains[i]
+            
             n_swaps += 1
         end
+        #@show sum(chains[i]), sum(chains[i+1])
     end
     
     return n_swaps
 end
+
 
 # ============================================
 # SWAP CON CRITERIO DE METROPOLIS

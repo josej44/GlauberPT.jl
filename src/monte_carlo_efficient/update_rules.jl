@@ -191,40 +191,40 @@ end
 
 
 
-# AGREGAR después de sequential_update!
-function sequential_update_with_energy!(spins, beta, j_vector, h_vector, p0, rng)
-    N = length(spins)
-    i = rand(rng, 1:N)
+# # AGREGAR después de sequential_update!
+# function sequential_update_with_energy!(spins, beta, j_vector, h_vector, p0, rng)
+#     N = length(spins)
+#     i = rand(rng, 1:N)
     
-    # Calcular ΔE si se flippea
-    delta_E = compute_local_energy_change(spins, i, j_vector, h_vector)
+#     # Calcular ΔE si se flippea
+#     delta_E = compute_local_energy_change(spins, i, j_vector, h_vector)
     
-    # Preparar vecinos
-    if i == 1
-        sigma_neighbors = [spins[1], spins[2]]
-    elseif i == N
-        sigma_neighbors = [spins[N-1], spins[N]]
-    else
-        sigma_neighbors = [spins[i-1], spins[i], spins[i+1]]
-    end
+#     # Preparar vecinos
+#     if i == 1
+#         sigma_neighbors = [spins[1], spins[2]]
+#     elseif i == N
+#         sigma_neighbors = [spins[N-1], spins[N]]
+#     else
+#         sigma_neighbors = [spins[i-1], spins[i], spins[i+1]]
+#     end
     
-    # Calcular probabilidades
-    p_up = glauber_transition_rate(sigma_neighbors, 1, i, beta, j_vector, h_vector, 0.0)
-    p_down = glauber_transition_rate(sigma_neighbors, -1, i, beta, j_vector, h_vector, 0.0)
+#     # Calcular probabilidades
+#     p_up = glauber_transition_rate(sigma_neighbors, 1, i, beta, j_vector, h_vector, 0.0)
+#     p_down = glauber_transition_rate(sigma_neighbors, -1, i, beta, j_vector, h_vector, 0.0)
     
-    p_total = p_up + p_down
-    p_up /= p_total
+#     p_total = p_up + p_down
+#     p_up /= p_total
     
-    old_spin = spins[i]
-    spins[i] = rand(rng) < p_up ? 1 : -1
+#     old_spin = spins[i]
+#     spins[i] = rand(rng) < p_up ? 1 : -1
     
-    # Si cambió, retornar ΔE; si no, retornar 0
-    if spins[i] != old_spin
-        return delta_E
-    else
-        return 0.0
-    end
-end
+#     # Si cambió, retornar ΔE; si no, retornar 0
+#     if spins[i] != old_spin
+#         return delta_E
+#     else
+#         return 0.0
+#     end
+# end
 
 
 
@@ -290,26 +290,26 @@ function metropolis_update!(spins, beta, j_vector, h_vector, rng)
 end
 
 
-# AGREGAR después de metropolis_update!
-function metropolis_update_with_energy!(spins, beta, j_vector, h_vector, rng)
-    N = length(spins)
-    i = rand(rng, 1:N)
+# # AGREGAR después de metropolis_update!
+# function metropolis_update_with_energy!(spins, beta, j_vector, h_vector, rng)
+#     N = length(spins)
+#     i = rand(rng, 1:N)
     
-    delta_E = compute_local_energy_change(spins, i, j_vector, h_vector)
+#     delta_E = compute_local_energy_change(spins, i, j_vector, h_vector)
     
-    accepted = false
-    if delta_E <= 0
-        spins[i] = -spins[i]
-        accepted = true
-    else
-        if rand(rng) < exp(-beta * delta_E)
-            spins[i] = -spins[i]
-            accepted = true
-        end
-    end
+#     accepted = false
+#     if delta_E <= 0
+#         spins[i] = -spins[i]
+#         accepted = true
+#     else
+#         if rand(rng) < exp(-beta * delta_E)
+#             spins[i] = -spins[i]
+#             accepted = true
+#         end
+#     end
     
-    return accepted, delta_E
-end
+#     return accepted, delta_E
+# end
 
 
 
@@ -350,6 +350,84 @@ end
 
 
 
+
+
+
+
+
+#############################################################
+
+# CORRECCIÓN 1: sequential_update_with_energy!
+function sequential_update_with_energy!(spins, beta, j_vector, h_vector, p0, rng)
+    N = length(spins)
+    i = rand(rng, 1:N)
+    
+    # Guardar spin original
+    old_spin = spins[i]
+    
+    # Calcular campo efectivo en sitio i
+    h_eff = h_vector[i]
+    if i > 1
+        h_eff += j_vector[i - 1] * spins[i - 1]
+    end
+    if i < N
+        h_eff += j_vector[i] * spins[i + 1]
+    end
+    
+    # Preparar vecinos para Glauber
+    if i == 1
+        sigma_neighbors = [spins[1], spins[2]]
+    elseif i == N
+        sigma_neighbors = [spins[N-1], spins[N]]
+    else
+        sigma_neighbors = [spins[i-1], spins[i], spins[i+1]]
+    end
+    
+    # Calcular probabilidades de Glauber
+    p_up = glauber_transition_rate(sigma_neighbors, 1, i, beta, j_vector, h_vector, 0.0)
+    p_down = glauber_transition_rate(sigma_neighbors, -1, i, beta, j_vector, h_vector, 0.0)
+    
+    # Normalizar
+    p_total = p_up + p_down
+    p_up /= p_total
+    
+    # Muestrear nuevo spin
+    new_spin = rand(rng) < p_up ? 1 : -1
+    spins[i] = new_spin
+    
+    # Calcular cambio de energía real
+    # E = -σᵢ * h_eff (contribución del sitio i)
+    # ΔE = E_new - E_old = -new_spin * h_eff - (-old_spin * h_eff)
+    delta_E = -(new_spin - old_spin) * h_eff
+    
+    return delta_E
+end
+
+# CORRECCIÓN 2: metropolis_update_with_energy!
+function metropolis_update_with_energy!(spins, beta, j_vector, h_vector, rng)
+    N = length(spins)
+    i = rand(rng, 1:N)
+    
+    # Calcular ΔE para el flip σᵢ → -σᵢ
+    delta_E = compute_local_energy_change(spins, i, j_vector, h_vector)
+    
+    accepted = false
+    if delta_E <= 0
+        spins[i] = -spins[i]
+        accepted = true
+    else
+        if rand(rng) < exp(-beta * delta_E)
+            spins[i] = -spins[i]
+            accepted = true
+        end
+    end
+    
+    # Solo retornar delta_E si se aceptó el cambio
+    return accepted, (accepted ? delta_E : 0.0)
+end
+
+
+####################################
 
 
 

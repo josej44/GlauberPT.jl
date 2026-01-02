@@ -156,7 +156,7 @@ function inverse_tt(B, bond; steps = 150)
     
         normalize_eachmatrix!(Bn)
         compress!(Bn; svd_trunc=TruncBond(bond))
-
+        
         # normalize_eachmatrix!(Bn)
         # if estimate_norm_tt(Bn) < B0
         #     Bn.z *= B0 / estimate_norm_tt(Bn) 

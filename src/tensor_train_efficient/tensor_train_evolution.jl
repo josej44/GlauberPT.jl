@@ -51,6 +51,9 @@ function distribution_b_tt(
             @tullio new_[m1,m2,n1,n2,σ_next] := A_i[m1,n1,σ,σ_next] * B_i[m2,n2,σ]
             @cast _[(m1,m2),(n1,n2),σ_next] := new_[m1,m2,n1,n2,σ_next]
         end |> TensorTrain
+
+        normalize_eachmatrix!(B)
+        compress!(B; svd_trunc=TruncBond(bond))
         
         B = swapfun(B)
         # In case of swap
