@@ -151,15 +151,9 @@ end
 ###
 # Build the tensor train of a single step transition rate of a sequential update dynamics 
 ###
-
 function build_sequential_transition_tt(transition_rate, params, bond = 5, Q::Int = 2, σ = x -> 2x - 3)
-    # Inferir N del tamaño de h_vector
     N = length(params.h_vector)
     
-    # ============================================
-    # Tensor inicial A1
-    # ============================================
-
     function transition_event(i, params, transition_rate)
         if i == 1
             tt_i = Array{Float64, 4}[]
@@ -168,8 +162,8 @@ function build_sequential_transition_tt(transition_rate, params, bond = 5, Q::In
                 for sigma_plus in 1:Q
                     f_vector = zeros(1, Q)
                     for j in 1:Q
-                        omega_j = σ(j)  # Valor de σ₂ᵗ
-                        neighbors = [σ(sigma), omega_j]  # [σ₁ᵗ, σ₂ᵗ]
+                        omega_j = σ(j)
+                        neighbors = [σ(sigma), omega_j]
                         f_vector[1, j] = transition_rate(neighbors, σ(sigma_plus), 1, params)
                     end
                     A1[1, :, sigma, sigma_plus] = f_vector
@@ -184,12 +178,12 @@ function build_sequential_transition_tt(transition_rate, params, bond = 5, Q::In
             foreach(_ -> push!(tt_i, [1 ;;; 0 ;;;; 0 ;;; 1]) , 1:N-2)
             push!(tt_i, [1  0;;; 0 0 ;;;; 0 0 ;;; 0 1])
             AN = zeros(Q, 1, Q, Q)
-            for sigma in 1:Q         # σₙᵗ
-                for sigma_plus in 1:Q # σₙᵗ⁺¹
+            for sigma in 1:Q
+                for sigma_plus in 1:Q
                     f_vector = zeros(Q, 1)
                     for j in 1:Q
-                        omega_j = σ(j)  # Valor de σₙ₋₁ᵗ
-                        neighbors = [omega_j, σ(sigma)]  # [σₙ₋₁ᵗ, σₙᵗ]
+                        omega_j = σ(j)
+                        neighbors = [omega_j, σ(sigma)]
                         f_vector[j, 1] = transition_rate(neighbors, σ(sigma_plus), N, params)
                     end
                     AN[:, 1, sigma, sigma_plus] = f_vector
@@ -203,16 +197,14 @@ function build_sequential_transition_tt(transition_rate, params, bond = 5, Q::In
             push!(tt_i, [1  0;;; 0 0 ;;;;0 0 ;;; 0 1])
 
             Ai = zeros(Q, Q, Q, Q)
-            for sigma in 1:Q         # σᵢᵗ
-                for sigma_plus in 1:Q # σᵢᵗ⁺¹
-            
+            for sigma in 1:Q
+                for sigma_plus in 1:Q
                     F_matrix = zeros(Q, Q)
-                
-                    for k in 1:Q  # ωₖ = σᵢ₋₁ᵗ (vecino izquierdo)
-                        for l in 1:Q  # ωₗ = σᵢ₊₁ᵗ (vecino derecho)
+                    for k in 1:Q
+                        for l in 1:Q
                             omega_k = σ(k)
                             omega_l = σ(l)
-                            neighbors = [omega_k, σ(sigma), omega_l]  # [σᵢ₋₁ᵗ, σᵢᵗ, σᵢ₊₁ᵗ]
+                            neighbors = [omega_k, σ(sigma), omega_l]
                             F_matrix[k, l] = transition_rate(neighbors, σ(sigma_plus), i, params)
                         end
                     end
@@ -227,12 +219,23 @@ function build_sequential_transition_tt(transition_rate, params, bond = 5, Q::In
     end
 
     tensors = transition_event(1, params, transition_rate)
-
+    
+    # Comprimir inmediatamente el primer evento
+    compress!(tensors, svd_trunc=TruncBond(bond))
 
     for i in 2:N
-        tensors += transition_event(i, params, transition_rate)
+        tt_i = transition_event(i, params, transition_rate)
+        
+        # Comprimir el nuevo evento ANTES de sumarlo
+        compress!(tt_i, svd_trunc=TruncBond(bond))
+        
+        # Sumar
+        tensors += tt_i
+        
+        # Comprimir después de cada suma
         compress!(tensors, svd_trunc=TruncBond(bond))
     end
+    
     divide_by_constant!(tensors, N)
     return tensors
 end

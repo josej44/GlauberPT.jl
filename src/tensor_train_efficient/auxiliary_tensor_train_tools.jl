@@ -129,7 +129,7 @@ end
 
 
 # Auxiliary function to calculate the inverse of a tensor train using the Newton method
-function inverse_tt(B, bond; steps = 150)
+function inverse_tt(B, bond; steps = 10)
     normalize_eachmatrix!(B)
     B0 = 1 / (2*estimate_norm_tt(B))
     @show B0
@@ -147,20 +147,13 @@ function inverse_tt(B, bond; steps = 150)
         normalize_eachmatrix!(temp1)
         compress!(temp1; svd_trunc=TruncBond(bond))
 
-        # normalize_eachmatrix!(temp1)
-        # absorb_z_into_matrices!(temp1)
         Bnn = two - temp1
 
-        # normalize_eachmatrix!(Bnn)
         Bn = Bnn * Bn
     
         normalize_eachmatrix!(Bn)
         compress!(Bn; svd_trunc=TruncBond(bond))
         
-        # normalize_eachmatrix!(Bn)
-        # if estimate_norm_tt(Bn) < B0
-        #     Bn.z *= B0 / estimate_norm_tt(Bn) 
-        # end
         @show estimate_norm_tt(Bn) Bn.z
     end
     normalize_eachmatrix!(Bn)
@@ -208,4 +201,61 @@ function inverse_tt_improve(B, bond; steps = 150)
     end
     normalize_eachmatrix!(Bn)
     return Bn, z_acc
+end
+
+
+function inverse_secant_tt(B, bond; steps=20)
+    # Normalizar primero
+    normalize_eachmatrix!(B)
+    
+    # Inicialización
+    norm_B = estimate_norm_tt(B)
+    Xminus1 = multiply_by_constant!(identity_tensor_train(B), 1.0 / (2.0 * norm_B))
+    
+    # Segunda aproximación (un paso de Newton desde Xminus1)
+    Id = identity_tensor_train(B)
+    BXm1 = B * Xminus1
+    compress!(BXm1; svd_trunc=TruncBond(bond))
+    two_Id = multiply_by_constant!(identity_tensor_train(B), 2.0)
+    X = Xminus1 * (two_Id - BXm1)
+    normalize_eachmatrix!(X)
+    compress!(X; svd_trunc=TruncBond(bond))
+
+    @showprogress for t in 1:steps
+        # Secante: X_{k+1} = X_k + X_{k-1} * (I - B*X_k)
+        
+        # Paso 1: B * X_k
+        BX = B * X
+        normalize_eachmatrix!(BX)
+        compress!(BX; svd_trunc=TruncBond(bond))
+        
+        # Paso 2: I - B*X_k
+        residual = Id - BX
+        normalize_eachmatrix!(residual)
+        compress!(residual; svd_trunc=TruncBond(bond))
+        
+        # Paso 3: X_{k-1} * (I - B*X_k)
+        correction = Xminus1 * residual
+        normalize_eachmatrix!(correction)
+        compress!(correction; svd_trunc=TruncBond(bond))
+        
+        # Paso 4: X_{k+1} = X_k + correction
+        Xplus1 = X + correction
+        normalize_eachmatrix!(Xplus1)
+        compress!(Xplus1; svd_trunc=TruncBond(bond))
+        
+        threshold_eraser(Xplus1, 1e-20)
+        # Actualizar para siguiente iteración
+        Xminus1 = X
+        X = Xplus1
+        
+        
+        # Monitoreo (opcional)
+        if t % 5 == 0
+            error_est = estimate_norm_tt(Id - B * X)
+            println("  Step $t: ||I - B*X|| ≈ $error_est")
+        end
+    end
+    
+    return X
 end
